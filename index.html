@@ -7,7 +7,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>EduLearn Pro</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -45,196 +46,190 @@
                                 Wybierz PDF
                             </button>
                         </div>
-                        <div class="separator">lub</div>
-                        <div class="link-input-group">
-                            <input type="url" class="form-control" id="linkInput" placeholder="Wklej link do strony WWW">
-                            <button class="btn btn--primary" id="addLinkBtn">Dodaj link</button>
+                        <div class="divider">lub</div>
+                        <div class="url-input-section">
+                            <input type="url" id="urlInput" placeholder="Wklej link do materiału...">
+                            <button class="btn btn--primary" onclick="app.handleUrlSubmit()">Dodaj Link</button>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Processing Section -->
-            <section class="processing-section hidden" id="processingSection">
-                <div class="processing-card card">
+                <!-- Recent Documents -->
+                <div class="recent-docs card">
                     <div class="card__body">
-                        <div class="processing-content">
-                            <div class="spinner"></div>
-                            <h3>Przetwarzanie dokumentu...</h3>
-                            <p>Analizuję zawartość i przygotowuję materiały do nauki</p>
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="progressFill"></div>
-                            </div>
+                        <h3>Ostatnie dokumenty</h3>
+                        <div id="recentDocsList" class="recent-docs-list">
+                            <p class="no-docs">Nie ma jeszcze przetworzonych dokumentów</p>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Activity Selection -->
-            <section class="activity-section hidden" id="activitySection">
-                <div class="activity-header">
-                    <h2>Co chcesz zrobić z tym materiałem?</h2>
-                    <p>Wybierz jedną z opcji, aby rozpocząć naukę</p>
+            <!-- Loading Section -->
+            <section class="loading-section hidden" id="loadingSection">
+                <div class="loading-card card">
+                    <div class="card__body">
+                        <div class="loading-spinner"></div>
+                        <h3 id="loadingText">Przetwarzanie dokumentu PDF...</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p id="loadingDetails">Ekstraktowanie tekstu...</p>
+                    </div>
                 </div>
-                <div class="activity-grid">
-                    <div class="activity-card card" data-activity="mindmap">
-                        <div class="card__body">
-                            <div class="activity-icon">🧠</div>
-                            <h3>Mapa myśli</h3>
-                            <p>Wizualizacja kluczowych pojęć i ich powiązań</p>
-                            <button class="btn btn--primary btn--full-width">Stwórz mapę</button>
+            </section>
+
+            <!-- Activities Section -->
+            <section class="activities-section hidden" id="activitiesSection">
+                <div class="activities-card card">
+                    <div class="card__body">
+                        <h2>Wybierz aktywność</h2>
+                        <div class="document-info">
+                            <p><strong>Dokument:</strong> <span id="currentDocName">-</span></p>
+                            <p><strong>Stron:</strong> <span id="currentDocPages">-</span></p>
                         </div>
-                    </div>
-                    <div class="activity-card card" data-activity="summary">
-                        <div class="card__body">
-                            <div class="activity-icon">📝</div>
-                            <h3>Streszczenie</h3>
-                            <p>Zwięzłe podsumowanie najważniejszych informacji</p>
-                            <button class="btn btn--primary btn--full-width">Generuj streszczenie</button>
-                        </div>
-                    </div>
-                    <div class="activity-card card" data-activity="quiz">
-                        <div class="card__body">
-                            <div class="activity-icon">🎯</div>
-                            <h3>Quiz</h3>
-                            <p>Sprawdź swoją wiedzę i otrzymaj szczegółowe wyniki</p>
-                            <button class="btn btn--primary btn--full-width">Rozpocznij quiz</button>
+                        <div class="activity-buttons">
+                            <button class="btn btn--activity" onclick="app.showMindMap()">
+                                🧠 Mapa Myśli
+                                <small>Wizualizuj kluczowe pojęcia</small>
+                            </button>
+                            <button class="btn btn--activity" onclick="app.showSummary()">
+                                📝 Streszczenie
+                                <small>Podsumowanie treści</small>
+                            </button>
+                            <button class="btn btn--activity" onclick="app.showQuiz()">
+                                🎓 Quiz
+                                <small>Sprawdź swoją wiedzę</small>
+                            </button>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Mind Map View -->
+            <!-- Mind Map Section -->
             <section class="mindmap-section hidden" id="mindmapSection">
-                <div class="section-header">
-                    <button class="btn btn--outline back-btn" id="backFromMindmap">← Powrót</button>
-                    <h2>Mapa myśli</h2>
-                    <button class="btn btn--secondary" id="exportMindmap">Eksportuj</button>
-                </div>
-                <div class="mindmap-container card">
+                <div class="mindmap-card card">
                     <div class="card__body">
-                        <div class="mindmap-canvas" id="mindmapCanvas"></div>
+                        <div class="section-header">
+                            <h2>🧠 Mapa Myśli</h2>
+                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                        </div>
+                        <div class="mindmap-container" id="mindmapContainer">
+                            <div class="mindmap-controls">
+                                <button onclick="app.zoomIn()">🔍+</button>
+                                <button onclick="app.zoomOut()">🔍-</button>
+                                <button onclick="app.resetZoom()">⌂</button>
+                            </div>
+                            <div class="mindmap-canvas" id="mindmapCanvas"></div>
+                        </div>
+                        <div class="mindmap-actions">
+                            <button class="btn btn--secondary" onclick="app.exportMindMap()">💾 Eksportuj</button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Summary View -->
+            <!-- Summary Section -->
             <section class="summary-section hidden" id="summarySection">
-                <div class="section-header">
-                    <button class="btn btn--outline back-btn" id="backFromSummary">← Powrót</button>
-                    <h2>Streszczenie</h2>
-                    <button class="btn btn--secondary" id="exportSummary">Eksportuj</button>
-                </div>
-                <div class="summary-container card">
+                <div class="summary-card card">
                     <div class="card__body">
+                        <div class="section-header">
+                            <h2>📝 Streszczenie</h2>
+                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                        </div>
                         <div class="summary-controls">
-                            <label class="form-label">Długość streszczenia:</label>
-                            <select class="form-control" id="summaryLength">
+                            <label>Długość streszczenia:</label>
+                            <select id="summaryLength" onchange="app.updateSummary()">
                                 <option value="short">Krótkie</option>
                                 <option value="medium" selected>Średnie</option>
-                                <option value="detailed">Szczegółowe</option>
+                                <option value="long">Szczegółowe</option>
                             </select>
                         </div>
-                        <div class="summary-content" id="summaryContent"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Quiz View -->
-            <section class="quiz-section hidden" id="quizSection">
-                <div class="section-header">
-                    <button class="btn btn--outline back-btn" id="backFromQuiz">← Powrót</button>
-                    <h2>Quiz</h2>
-                    <div class="quiz-progress">
-                        <span id="questionNumber">1</span> / <span id="totalQuestions">4</span>
-                    </div>
-                </div>
-                <div class="quiz-container">
-                    <div class="quiz-question-card card">
-                        <div class="card__body">
-                            <h3 id="questionText">Pytanie zostanie tutaj wyświetlone</h3>
-                            <div class="quiz-options" id="quizOptions"></div>
-                            <div class="quiz-feedback hidden" id="quizFeedback"></div>
-                            <div class="quiz-controls">
-                                <button class="btn btn--primary" id="submitAnswer">Odpowiedz</button>
-                                <button class="btn btn--secondary hidden" id="nextQuestion">Następne pytanie</button>
-                            </div>
+                        <div class="summary-content" id="summaryContent">
+                            <div class="loading-text">Generowanie streszczenia...</div>
+                        </div>
+                        <div class="summary-actions">
+                            <button class="btn btn--secondary" onclick="app.exportSummary()">💾 Eksportuj</button>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Quiz Results -->
-            <section class="quiz-results-section hidden" id="quizResultsSection">
-                <div class="section-header">
-                    <button class="btn btn--outline back-btn" id="backFromResults">← Powrót</button>
-                    <h2>Wyniki quiz</h2>
+            <!-- Quiz Section -->
+            <section class="quiz-section hidden" id="quizSection">
+                <div class="quiz-card card">
+                    <div class="card__body">
+                        <div class="section-header">
+                            <h2>🎓 Quiz</h2>
+                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                        </div>
+                        <div class="quiz-progress">
+                            <div class="progress-info">
+                                <span id="currentQuestion">1</span> z <span id="totalQuestions">10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="quizProgress"></div>
+                            </div>
+                        </div>
+                        <div class="quiz-content" id="quizContent">
+                            <!-- Quiz questions will be populated here -->
+                        </div>
+                    </div>
                 </div>
-                <div class="results-grid">
-                    <div class="score-card card">
-                        <div class="card__body">
-                            <div class="score-display">
-                                <div class="score-percentage" id="scorePercentage">0%</div>
-                                <div class="score-details">
-                                    <span id="correctAnswers">0</span> / <span id="totalAnswers">0</span> poprawnych odpowiedzi
+            </section>
+
+            <!-- Quiz Results Section -->
+            <section class="quiz-results-section hidden" id="quizResultsSection">
+                <div class="results-card card">
+                    <div class="card__body">
+                        <h2>🏆 Wyniki Quiz</h2>
+                        <div class="results-summary">
+                            <div class="score-circle">
+                                <div class="score-text">
+                                    <span id="finalScore">0</span><span class="percent">%</span>
                                 </div>
                             </div>
+                            <div class="results-details">
+                                <p><strong>Poprawne odpowiedzi:</strong> <span id="correctAnswers">0</span></p>
+                                <p><strong>Błędne odpowiedzi:</strong> <span id="wrongAnswers">0</span></p>
+                                <p><strong>Przewidywana ocena:</strong> <span id="predictedGrade">-</span></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="grade-card card">
-                        <div class="card__body">
-                            <h3>Przewidywana ocena</h3>
-                            <div class="grade-display" id="gradeDisplay">2</div>
-                        </div>
-                    </div>
-                    <div class="improvements-card card">
-                        <div class="card__body">
+                        
+                        <div class="improvement-areas">
                             <h3>Obszary do poprawy</h3>
-                            <ul id="improvementsList"></ul>
+                            <div id="improvementList">
+                                <!-- Improvement areas will be populated here -->
+                            </div>
+                        </div>
+
+                        <div class="results-actions">
+                            <button class="btn btn--primary" onclick="app.retakeQuiz()">🔄 Ponów Quiz</button>
+                            <button class="btn btn--secondary" onclick="app.showActivities()">← Powrót</button>
                         </div>
                     </div>
                 </div>
-                <div class="results-actions">
-                    <button class="btn btn--primary" id="retakeQuiz">Powtórz quiz</button>
-                    <button class="btn btn--secondary" id="tryOtherActivity">Wybierz inną aktywność</button>
-                </div>
-            </section>
-
-            <!-- Recent Documents -->
-            <section class="recent-section" id="recentSection">
-                <h2>Ostatnie dokumenty</h2>
-                <div class="recent-grid" id="recentGrid">
-                    <div class="empty-state">
-                        <div class="empty-icon">📭</div>
-                        <p>Nie masz jeszcze żadnych dokumentów. Dodaj pierwszy materiał do nauki!</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Achievements -->
-            <section class="achievements-section">
-                <h2>Twoje osiągnięcia</h2>
-                <div class="badges-grid" id="badgesGrid"></div>
             </section>
         </div>
     </main>
 
-    <!-- Modal for notifications -->
-    <div class="modal hidden" id="notificationModal">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Powiadomienie</h3>
-                <button class="modal-close" id="closeModal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="modalMessage"></p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn--primary" id="modalOkBtn">OK</button>
+    <!-- Gamification Elements -->
+    <div class="achievement-popup hidden" id="achievementPopup">
+        <div class="achievement-content">
+            <div class="achievement-icon" id="achievementIcon">🏆</div>
+            <div class="achievement-text">
+                <h3 id="achievementTitle">Nowa Odznaka!</h3>
+                <p id="achievementDescription">-</p>
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>EduLearn Pro - Inteligentna nauka z AI</p>
+        </div>
+    </footer>
 
     <script src="app.js"></script>
 </body>

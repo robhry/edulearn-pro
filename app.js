@@ -1,789 +1,930 @@
-// EduLearn Pro Application
+// EduLearn Pro - Live Application
 class EduLearnApp {
     constructor() {
         this.currentSection = 'upload';
         this.currentQuizIndex = 0;
         this.quizAnswers = [];
-        this.selectedQuizOption = null; // Track selected option properly
-        this.userProgress = {
+        this.selectedQuizOption = null;
+        this.currentPdfDoc = null;
+        this.extractedText = '';
+        this.currentDocumentName = '';
+        
+        // User progress
+        this.userProgress = this.loadProgress() || {
             points: 0,
             level: 'Początkujący',
             badges: [],
-            documentsProcessed: 0
+            documentsProcessed: 0,
+            completedQuizzes: 0
         };
         
-        // Sample data from application_data_json
-        this.sampleContent = "Anatomia człowieka to nauka zajmująca się badaniem budowy ciała ludzkiego. System kostny składa się z 206 kości u dorosłego człowieka. Żebra to kości płaskie, które chronią narządy klatki piersiowej. Wyróżniamy 12 par żeber: 7 par żeber prawdziwych połączonych bezpośrednio z mostkiem, 3 pary żeber fałszywych połączonych pośrednio z mostkiem oraz 2 pary żeber wolnych. Kręgosłup składa się z 33-34 kręgów podzielonych na odcinki: szyjny (7 kręgów), piersiowy (12 kręgów), lędźwiowy (5 kręgów), krzyżowy (5 kręgów zrośniętych) i guziczny (4-5 kręgów). Ruchy kręgosłupa to zgięcie, prostowanie, skłony boczne i rotacja.";
+        // Generated content from real PDFs
+        this.mindMapData = null;
+        this.summaryData = null;
+        this.quizData = [];
         
-        this.mindMapData = {
-            central: "Anatomia człowieka",
-            branches: [
-                {
-                    topic: "System kostny",
-                    subtopics: ["206 kości u dorosłego", "Funkcje ochronne", "Funkcje podporowe"]
-                },
-                {
-                    topic: "Żebra",
-                    subtopics: ["12 par żeber", "7 par prawdziwych", "3 pary fałszywych", "2 pary wolnych", "Ochrona narządów"]
-                },
-                {
-                    topic: "Kręgosłup", 
-                    subtopics: ["33-34 kręgi", "Odcinek szyjny (7)", "Odcinek piersiowy (12)", "Odcinek lędźwiowy (5)", "Odcinek krzyżowy (5)", "Odcinek guziczny (4-5)"]
-                },
-                {
-                    topic: "Ruchy kręgosłupa",
-                    subtopics: ["Zgięcie", "Prostowanie", "Skłony boczne", "Rotacja"]
-                }
-            ]
-        };
-        
-        this.quizData = [
-            {
-                question: "Ile par żeber ma dorosły człowiek?",
-                options: ["10 par", "11 par", "12 par", "13 par"],
-                correct: 2,
-                explanation: "Dorosły człowiek ma 12 par żeber chroniących narządy klatki piersiowej."
-            },
-            {
-                question: "Które żebra nazywane są prawdziwymi?",
-                options: ["Pierwsze 5 par", "Pierwsze 7 par", "Pierwsze 9 par", "Wszystkie żebra"],
-                correct: 1,
-                explanation: "Pierwsze 7 par żeber to żebra prawdziwe, połączone bezpośrednio z mostkiem."
-            },
-            {
-                question: "Ile kręgów ma odcinek lędźwiowy kręgosłupa?",
-                options: ["3 kręgi", "5 kręgów", "7 kręgów", "12 kręgów"],
-                correct: 1,
-                explanation: "Odcinek lędźwiowy kręgosłupa składa się z 5 kręgów."
-            },
-            {
-                question: "Prawda czy fałsz: Kręgosłup może wykonywać ruchy rotacyjne.",
-                options: ["Prawda", "Fałsz"],
-                correct: 0,
-                explanation: "Prawda. Kręgosłup może wykonywać ruchy rotacyjne oprócz zgięcia, prostowania i skłonów bocznych."
-            }
-        ];
-        
+        // Gamification data
         this.badges = [
-            {name: "PDF Master", description: "Przetworzyłeś pierwszy dokument PDF", icon: "📄", earned: false},
-            {name: "Mind Map Creator", description: "Stworzyłeś pierwszą mapę myśli", icon: "🧠", earned: false},
-            {name: "Quiz Champion", description: "Uzyskałeś wynik powyżej 80%", icon: "🏆", earned: false},
-            {name: "Streaker", description: "Uczyłeś się przez 7 dni z rzędu", icon: "🔥", earned: false},
-            {name: "Perfectionist", description: "Uzyskałeś 100% w quizie", icon: "⭐", earned: false}
+            {name: 'PDF Master', description: 'Przetworzył pierwszy dokument PDF', icon: '📄', requirement: 'uploadPdf'},
+            {name: 'Mind Map Creator', description: 'Stworzył pierwszą mapę myśli', icon: '🧠', requirement: 'createMindMap'},
+            {name: 'Quiz Champion', description: 'Uzyskał wynik powyżej 80%', icon: '🏆', requirement: 'score80'},
+            {name: 'Perfectionist', description: 'Uzyskał 100% w quizie', icon: '⭐', requirement: 'perfectScore'},
+            {name: 'Streaker', description: 'Uczył się przez 7 dni z rzędu', icon: '🔥', requirement: 'streak7'}
         ];
-
+        
+        this.levels = ['Początkujący', 'Średniozaawansowany', 'Zaawansowany', 'Ekspert'];
+        
         this.init();
     }
-
+    
     init() {
+        // Configure PDF.js worker
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+        
+        // Setup event listeners
         this.setupEventListeners();
-        this.updateUserStats();
-        this.renderBadges();
-        this.showSection('upload');
+        
+        // Update UI with current progress
+        this.updateProgressDisplay();
     }
-
+    
     setupEventListeners() {
-        // Upload functionality - Fix file input to properly trigger
-        const fileInputBtn = document.getElementById('fileInput');
-        const uploadArea = document.getElementById('uploadArea');
-        const addLinkBtn = document.getElementById('addLinkBtn');
-
-        fileInputBtn?.addEventListener('change', (e) => this.handleFileUpload(e));
-        
-        // Fix upload area click to properly trigger file input
-        uploadArea?.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            fileInputBtn?.click();
-        });
-        
-        uploadArea?.addEventListener('dragover', (e) => this.handleDragOver(e));
-        uploadArea?.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-        uploadArea?.addEventListener('drop', (e) => this.handleFileDrop(e));
-        addLinkBtn?.addEventListener('click', () => this.handleLinkAdd());
-
-        // Activity selection
-        document.querySelectorAll('.activity-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const activity = card.dataset.activity;
-                this.startActivity(activity);
+        // File input
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    this.handleFileUpload(e.target.files[0]);
+                }
             });
-        });
-
-        // Navigation
-        document.getElementById('backFromMindmap')?.addEventListener('click', () => this.showSection('activity'));
-        document.getElementById('backFromSummary')?.addEventListener('click', () => this.showSection('activity'));
-        document.getElementById('backFromQuiz')?.addEventListener('click', () => this.showSection('activity'));
-        document.getElementById('backFromResults')?.addEventListener('click', () => this.showSection('activity'));
-
-        // Quiz functionality
-        document.getElementById('submitAnswer')?.addEventListener('click', () => this.submitQuizAnswer());
-        document.getElementById('nextQuestion')?.addEventListener('click', () => this.nextQuestion());
-        document.getElementById('retakeQuiz')?.addEventListener('click', () => this.retakeQuiz());
-        document.getElementById('tryOtherActivity')?.addEventListener('click', () => this.showSection('activity'));
-
-        // Summary controls
-        document.getElementById('summaryLength')?.addEventListener('change', (e) => this.updateSummary(e.target.value));
-
-        // Export functionality
-        document.getElementById('exportMindmap')?.addEventListener('click', () => this.exportMindMap());
-        document.getElementById('exportSummary')?.addEventListener('click', () => this.exportSummary());
-
-        // Modal
-        document.getElementById('closeModal')?.addEventListener('click', () => this.hideModal());
-        document.getElementById('modalOkBtn')?.addEventListener('click', () => this.hideModal());
+        }
         
-        // Modal backdrop click to close
-        document.querySelector('.modal-backdrop')?.addEventListener('click', () => this.hideModal());
-    }
-
-    // File handling
-    handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (file && file.type === 'application/pdf') {
-            this.processDocument(file.name, 'pdf');
-        } else if (file) {
-            this.showModal('Błąd', 'Proszę wybrać plik PDF.');
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
+            uploadArea.addEventListener('drop', this.handleDrop.bind(this));
         }
     }
-
-    handleDragOver(event) {
-        event.preventDefault();
-        event.currentTarget.classList.add('drag-over');
+    
+    handleDragOver(e) {
+        e.preventDefault();
+        e.currentTarget.classList.add('dragover');
     }
-
-    handleDragLeave(event) {
-        event.currentTarget.classList.remove('drag-over');
-    }
-
-    handleFileDrop(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('drag-over');
+    
+    handleDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('dragover');
         
-        const files = event.dataTransfer.files;
-        if (files.length > 0) {
-            const file = files[0];
-            if (file.type === 'application/pdf') {
-                this.processDocument(file.name, 'pdf');
-            } else {
-                this.showModal('Błąd', 'Proszę upuścić plik PDF.');
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && files[0].type === 'application/pdf') {
+            this.handleFileUpload(files[0]);
+        } else {
+            alert('Proszę upuścić prawidłowy plik PDF');
+        }
+    }
+    
+    async handleFileUpload(file) {
+        try {
+            this.currentDocumentName = file.name;
+            this.showLoading('Przetwarzanie dokumentu PDF...');
+            
+            console.log('Rozpoczynam przetwarzanie pliku:', file.name);
+            
+            // Read file as ArrayBuffer
+            const arrayBuffer = await this.readFileAsArrayBuffer(file);
+            console.log('Plik przeczytany, rozmiar:', arrayBuffer.byteLength, 'bajtów');
+            
+            // Load PDF document
+            const loadingTask = pdfjsLib.getDocument(new Uint8Array(arrayBuffer));
+            this.currentPdfDoc = await loadingTask.promise;
+            
+            console.log('PDF załadowany, liczba stron:', this.currentPdfDoc.numPages);
+            
+            // Extract text from all pages
+            this.updateLoadingProgress(30, 'Ekstraktowanie tekstu...');
+            this.extractedText = await this.extractAllText(this.currentPdfDoc);
+            
+            console.log('Tekst wyekstraktowany, długość:', this.extractedText.length, 'znaków');
+            console.log('Początek tekstu:', this.extractedText.substring(0, 200) + '...');
+            
+            if (this.extractedText.trim().length === 0) {
+                throw new Error('Nie udało się wyekstraktować tekstu z PDF. Plik może być zeskanowany lub zabezpieczony.');
+            }
+            
+            // Generate mind map data
+            this.updateLoadingProgress(60, 'Generowanie mapy myśli...');
+            this.mindMapData = this.generateMindMapFromText(this.extractedText);
+            
+            // Generate summary data
+            this.updateLoadingProgress(80, 'Tworzenie streszczenia...');
+            this.summaryData = this.generateSummaryFromText(this.extractedText);
+            
+            // Generate quiz questions
+            this.updateLoadingProgress(90, 'Przygotowywanie quizu...');
+            this.quizData = this.generateQuizFromText(this.extractedText);
+            
+            // Award badge for first PDF upload
+            this.checkBadgeRequirement('uploadPdf');
+            
+            // Update progress
+            this.userProgress.documentsProcessed++;
+            this.addPoints(10);
+            this.saveProgress();
+            
+            // Save to recent documents
+            this.addToRecentDocuments(file.name, this.currentPdfDoc.numPages);
+            
+            this.updateLoadingProgress(100, 'Gotowe!');
+            
+            setTimeout(() => {
+                this.hideLoading();
+                this.showActivities();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Błąd przetwarzania PDF:', error);
+            this.hideLoading();
+            alert(`Nie udało się przetworzyć pliku PDF:\n${error.message}\n\nSprawdź czy:\n- Plik jest prawidłowym PDF\n- PDF nie jest zabezpieczony hasłem\n- Plik zawiera tekst (nie tylko obrazy)`);
+        }
+    }
+    
+    readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Nie udało się przeczytać pliku'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    
+    async extractAllText(pdfDoc) {
+        const numPages = pdfDoc.numPages;
+        let fullText = '';
+        
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+            try {
+                const page = await pdfDoc.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                const pageText = textContent.items
+                    .filter(item => item.str && item.str.trim().length > 0)
+                    .map(item => item.str)
+                    .join(' ');
+                    
+                fullText += pageText + '\n';
+                
+                // Update progress
+                const progress = Math.round((pageNum / numPages) * 30) + 30; // 30-60% for text extraction
+                this.updateLoadingProgress(progress, `Przetwarzanie strony ${pageNum}/${numPages}...`);
+                
+            } catch (pageError) {
+                console.warn(`Błąd przetwarzania strony ${pageNum}:`, pageError);
             }
         }
-    }
-
-    handleLinkAdd() {
-        const linkInput = document.getElementById('linkInput');
-        const url = linkInput?.value.trim();
         
-        if (url && this.isValidUrl(url)) {
-            this.processDocument(url, 'link');
-            linkInput.value = '';
-        } else {
-            this.showModal('Błąd', 'Proszę wprowadzić prawidłowy adres URL.');
-        }
+        return fullText.trim();
     }
-
-    isValidUrl(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
-
-    // Document processing
-    processDocument(source, type) {
-        this.showSection('processing');
-        this.simulateProcessing().then(() => {
-            this.awardPoints(10);
-            this.checkBadge('PDF Master');
-            this.userProgress.documentsProcessed++;
-            this.showSection('activity');
+    
+    generateMindMapFromText(text) {
+        const keywords = this.extractKeywords(text);
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 20);
+        
+        // Find main topic (most frequent significant word)
+        const mainTopic = keywords[0] || "Główny temat";
+        
+        // Create branches for top keywords
+        const branches = keywords.slice(1, 6).map(keyword => {
+            const relatedSentences = this.findRelatedSentences(keyword, sentences);
+            return {
+                topic: this.capitalizeFirst(keyword),
+                subtopics: relatedSentences.slice(0, 4).map(s => this.extractKeyPhrase(s))
+            };
         });
+        
+        return {
+            central: this.capitalizeFirst(mainTopic),
+            branches: branches
+        };
     }
-
-    simulateProcessing() {
-        return new Promise((resolve) => {
-            const progressFill = document.getElementById('progressFill');
-            let progress = 0;
+    
+    extractKeywords(text) {
+        // Polish stop words
+        const stopWords = [
+            'i', 'a', 'w', 'na', 'do', 'z', 'ze', 'się', 'że', 'przez', 'dla', 'od', 'o', 'po', 'przy',
+            'bardzo', 'tylko', 'oraz', 'także', 'również', 'jest', 'są', 'będzie', 'może', 'można',
+            'tym', 'tej', 'ten', 'ta', 'to', 'te', 'ich', 'jego', 'jej', 'jego', 'jako', 'oraz'
+        ];
+        
+        const words = text.toLowerCase()
+            .replace(/[^\w\sąęćłńóśźż]/g, ' ')
+            .split(/\s+/)
+            .filter(word => 
+                word.length > 3 && 
+                !stopWords.includes(word) &&
+                !/^\d+$/.test(word)
+            );
+        
+        // Count word frequency
+        const wordCount = {};
+        words.forEach(word => {
+            wordCount[word] = (wordCount[word] || 0) + 1;
+        });
+        
+        // Return most frequent words
+        return Object.keys(wordCount)
+            .sort((a, b) => wordCount[b] - wordCount[a])
+            .slice(0, 10);
+    }
+    
+    findRelatedSentences(keyword, sentences) {
+        return sentences
+            .filter(sentence => sentence.toLowerCase().includes(keyword.toLowerCase()))
+            .slice(0, 5);
+    }
+    
+    extractKeyPhrase(sentence) {
+        const words = sentence.trim().split(' ');
+        if (words.length <= 6) return sentence.trim();
+        
+        // Try to find a meaningful phrase
+        const phrases = [];
+        for (let i = 0; i < words.length - 2; i++) {
+            phrases.push(words.slice(i, i + 3).join(' '));
+        }
+        
+        return phrases[0] || words.slice(0, 4).join(' ') + '...';
+    }
+    
+    generateSummaryFromText(text) {
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 30);
+        const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 50);
+        
+        return {
+            short: this.createSummary(sentences, 3, 'short'),
+            medium: this.createSummary(sentences, 6, 'medium'),
+            long: this.createSummary(sentences, 10, 'long')
+        };
+    }
+    
+    createSummary(sentences, maxSentences, type) {
+        // Score sentences based on keyword frequency and position
+        const scoredSentences = sentences.map((sentence, index) => {
+            let score = 0;
             
-            const interval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress >= 100) {
-                    progress = 100;
-                    clearInterval(interval);
-                    setTimeout(resolve, 500);
-                }
-                
-                if (progressFill) {
-                    progressFill.style.width = `${progress}%`;
-                }
-            }, 200);
+            // Position score (earlier sentences are more important)
+            score += (sentences.length - index) / sentences.length * 0.3;
+            
+            // Length score (not too short, not too long)
+            const wordCount = sentence.split(' ').length;
+            if (wordCount >= 10 && wordCount <= 30) score += 0.3;
+            
+            // Keyword density score
+            const keywords = this.extractKeywords(sentence);
+            score += keywords.length * 0.1;
+            
+            return { sentence: sentence.trim(), score };
         });
+        
+        // Select top sentences
+        const topSentences = scoredSentences
+            .sort((a, b) => b.score - a.score)
+            .slice(0, maxSentences)
+            .map(item => item.sentence);
+        
+        return topSentences.join('. ') + '.';
     }
-
-    // Section navigation
-    showSection(sectionName) {
-        // Hide all sections
-        document.querySelectorAll('section').forEach(section => {
-            section.classList.add('hidden');
-        });
-
-        // Show target section
-        const targetSection = document.getElementById(`${sectionName}Section`);
-        if (targetSection) {
-            targetSection.classList.remove('hidden');
-            targetSection.classList.add('fade-in');
+    
+    generateQuizFromText(text) {
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 20);
+        const keywords = this.extractKeywords(text);
+        const quiz = [];
+        
+        // Generate different types of questions
+        const questionTypes = ['multiple_choice', 'true_false', 'fill_blank'];
+        
+        for (let i = 0; i < Math.min(12, sentences.length / 5); i++) {
+            const questionType = questionTypes[i % questionTypes.length];
+            const sentence = sentences[i * 3] || sentences[i];
+            
+            let question;
+            
+            switch (questionType) {
+                case 'multiple_choice':
+                    question = this.createMultipleChoiceQuestion(sentence, keywords);
+                    break;
+                case 'true_false':
+                    question = this.createTrueFalseQuestion(sentence);
+                    break;
+                case 'fill_blank':
+                    question = this.createFillBlankQuestion(sentence, keywords);
+                    break;
+            }
+            
+            if (question) {
+                quiz.push(question);
+            }
         }
-
-        // Show/hide additional sections based on current section
-        if (sectionName === 'upload') {
-            document.getElementById('recentSection')?.classList.remove('hidden');
-            document.querySelector('.achievements-section')?.classList.remove('hidden');
-        }
-
-        this.currentSection = sectionName;
+        
+        return quiz.slice(0, 10); // Return max 10 questions
     }
-
-    // Activity management
-    startActivity(activityType) {
-        switch (activityType) {
-            case 'mindmap':
-                this.generateMindMap();
-                break;
-            case 'summary':
-                this.generateSummary();
-                break;
-            case 'quiz':
-                this.startQuiz();
-                break;
+    
+    createMultipleChoiceQuestion(sentence, keywords) {
+        const words = sentence.split(' ').filter(w => w.length > 4);
+        if (words.length < 5) return null;
+        
+        const targetWord = words[Math.floor(Math.random() * words.length)];
+        const question = sentence.replace(targetWord, '____');
+        
+        // Create distractors
+        const distractors = keywords
+            .filter(k => k !== targetWord.toLowerCase())
+            .slice(0, 3)
+            .map(k => this.capitalizeFirst(k));
+        
+        const options = [targetWord, ...distractors].slice(0, 4);
+        this.shuffleArray(options);
+        
+        return {
+            question: `Uzupełnij zdanie: ${question}`,
+            options: options,
+            correct: options.indexOf(targetWord),
+            type: 'multiple_choice',
+            explanation: `Prawidłowa odpowiedź to "${targetWord}" zgodnie z treścią dokumentu.`
+        };
+    }
+    
+    createTrueFalseQuestion(sentence) {
+        const isTrue = Math.random() > 0.5;
+        
+        if (isTrue) {
+            return {
+                question: `Prawda czy fałsz: ${sentence}`,
+                options: ['Prawda', 'Fałsz'],
+                correct: 0,
+                type: 'true_false',
+                explanation: 'To stwierdzenie jest prawdziwe według treści dokumentu.'
+            };
+        } else {
+            // Modify sentence to make it false
+            const modifiedSentence = this.modifySentenceToFalse(sentence);
+            return {
+                question: `Prawda czy fałsz: ${modifiedSentence}`,
+                options: ['Prawda', 'Fałsz'],
+                correct: 1,
+                type: 'true_false',
+                explanation: 'To stwierdzenie jest fałszywe - zostało zmodyfikowane w stosunku do treści dokumentu.'
+            };
         }
     }
-
-    // Mind Map functionality
-    generateMindMap() {
-        this.showSection('mindmap');
+    
+    createFillBlankQuestion(sentence, keywords) {
+        const words = sentence.split(' ');
+        const importantWords = words.filter(w => 
+            w.length > 4 && 
+            keywords.some(k => w.toLowerCase().includes(k))
+        );
+        
+        if (importantWords.length === 0) return null;
+        
+        const targetWord = importantWords[0];
+        const question = sentence.replace(targetWord, '____');
+        
+        return {
+            question: `Uzupełnij: ${question}`,
+            options: [targetWord, `Nie ${targetWord}`, `${targetWord}y`, `Bez ${targetWord}`],
+            correct: 0,
+            type: 'fill_blank',
+            explanation: `Prawidłowa odpowiedź to "${targetWord}".`
+        };
+    }
+    
+    modifySentenceToFalse(sentence) {
+        // Simple modifications to make sentence false
+        const modifications = [
+            s => s.replace(/jest/g, 'nie jest'),
+            s => s.replace(/ma/g, 'nie ma'),
+            s => s.replace(/można/g, 'nie można'),
+            s => s.replace(/(\d+)/g, (match) => (parseInt(match) + 10).toString())
+        ];
+        
+        const modification = modifications[Math.floor(Math.random() * modifications.length)];
+        return modification(sentence);
+    }
+    
+    // UI Methods
+    showLoading(message = 'Ładowanie...') {
+        document.getElementById('uploadSection').classList.add('hidden');
+        document.getElementById('activitiesSection').classList.add('hidden');
+        document.getElementById('loadingSection').classList.remove('hidden');
+        document.getElementById('loadingText').textContent = message;
+        this.updateLoadingProgress(0, 'Rozpoczynam...');
+    }
+    
+    hideLoading() {
+        document.getElementById('loadingSection').classList.add('hidden');
+    }
+    
+    updateLoadingProgress(percent, details) {
+        const progressFill = document.getElementById('progressFill');
+        const loadingDetails = document.getElementById('loadingDetails');
+        
+        if (progressFill) {
+            progressFill.style.width = `${percent}%`;
+        }
+        
+        if (loadingDetails && details) {
+            loadingDetails.textContent = details;
+        }
+    }
+    
+    showActivities() {
+        this.hideAllSections();
+        document.getElementById('activitiesSection').classList.remove('hidden');
+        
+        // Update document info
+        document.getElementById('currentDocName').textContent = this.currentDocumentName;
+        document.getElementById('currentDocPages').textContent = 
+            this.currentPdfDoc ? this.currentPdfDoc.numPages : '-';
+    }
+    
+    showMindMap() {
+        this.hideAllSections();
+        document.getElementById('mindmapSection').classList.remove('hidden');
         this.renderMindMap();
-        this.awardPoints(25);
-        this.checkBadge('Mind Map Creator');
+        this.checkBadgeRequirement('createMindMap');
+        this.addPoints(25);
     }
-
+    
+    showSummary() {
+        this.hideAllSections();
+        document.getElementById('summarySection').classList.remove('hidden');
+        this.renderSummary();
+        this.addPoints(15);
+    }
+    
+    showQuiz() {
+        this.hideAllSections();
+        document.getElementById('quizSection').classList.remove('hidden');
+        this.startQuiz();
+        this.addPoints(5); // Small points for starting
+    }
+    
+    hideAllSections() {
+        const sections = [
+            'uploadSection', 'loadingSection', 'activitiesSection', 
+            'mindmapSection', 'summarySection', 'quizSection', 'quizResultsSection'
+        ];
+        
+        sections.forEach(sectionId => {
+            const element = document.getElementById(sectionId);
+            if (element) {
+                element.classList.add('hidden');
+            }
+        });
+    }
+    
     renderMindMap() {
         const canvas = document.getElementById('mindmapCanvas');
-        if (!canvas) return;
-
-        canvas.innerHTML = '';
+        if (!canvas || !this.mindMapData) return;
         
-        const containerRect = canvas.getBoundingClientRect();
-        const centerX = containerRect.width / 2;
-        const centerY = containerRect.height / 2;
-
+        canvas.innerHTML = ''; // Clear previous content
+        
         // Create central node
-        const centralNode = this.createMindMapNode(
-            this.mindMapData.central, 
-            centerX - 100, 
-            centerY - 25, 
-            'central'
-        );
+        const centralNode = document.createElement('div');
+        centralNode.className = 'mind-node central-node';
+        centralNode.textContent = this.mindMapData.central;
+        centralNode.style.left = '50%';
+        centralNode.style.top = '50%';
+        centralNode.style.transform = 'translate(-50%, -50%)';
         canvas.appendChild(centralNode);
-
+        
         // Create branch nodes
-        const angleStep = (2 * Math.PI) / this.mindMapData.branches.length;
-        const branchRadius = 120;
-
         this.mindMapData.branches.forEach((branch, index) => {
-            const angle = index * angleStep;
-            const branchX = centerX + Math.cos(angle) * branchRadius - 75;
-            const branchY = centerY + Math.sin(angle) * branchRadius - 20;
-
-            // Create line to branch
-            const line = this.createMindMapLine(centerX, centerY, branchX + 75, branchY + 20);
-            canvas.appendChild(line);
-
-            // Create branch node
-            const branchNode = this.createMindMapNode(branch.topic, branchX, branchY, 'branch');
+            const angle = (index * 360) / this.mindMapData.branches.length;
+            const radius = 200;
+            
+            const x = 50 + radius * Math.cos(angle * Math.PI / 180) / 10;
+            const y = 50 + radius * Math.sin(angle * Math.PI / 180) / 10;
+            
+            // Main branch node
+            const branchNode = document.createElement('div');
+            branchNode.className = 'mind-node branch-node';
+            branchNode.textContent = branch.topic;
+            branchNode.style.left = `${x}%`;
+            branchNode.style.top = `${y}%`;
+            branchNode.style.transform = 'translate(-50%, -50%)';
             canvas.appendChild(branchNode);
-
-            // Create subtopic nodes
-            const subtopicRadius = 80;
-            const subtopicAngleStep = Math.PI / Math.max(branch.subtopics.length - 1, 1);
-            const startAngle = angle - Math.PI / 4;
-
-            branch.subtopics.forEach((subtopic, subtopicIndex) => {
-                const subtopicAngle = startAngle + subtopicIndex * subtopicAngleStep;
-                const subtopicX = branchX + 75 + Math.cos(subtopicAngle) * subtopicRadius - 60;
-                const subtopicY = branchY + 20 + Math.sin(subtopicAngle) * subtopicRadius - 15;
-
-                // Create line to subtopic
-                const subtopicLine = this.createMindMapLine(branchX + 75, branchY + 20, subtopicX + 60, subtopicY + 15);
-                canvas.appendChild(subtopicLine);
-
-                // Create subtopic node
-                const subtopicNode = this.createMindMapNode(subtopic, subtopicX, subtopicY, 'subtopic');
-                canvas.appendChild(subtopicNode);
+            
+            // Connection line
+            const line = document.createElement('div');
+            line.className = 'mind-connection';
+            const lineLength = Math.sqrt(Math.pow(x - 50, 2) + Math.pow(y - 50, 2));
+            const lineAngle = Math.atan2(y - 50, x - 50) * 180 / Math.PI;
+            
+            line.style.width = `${lineLength}%`;
+            line.style.left = '50%';
+            line.style.top = '50%';
+            line.style.transform = `rotate(${lineAngle}deg)`;
+            line.style.transformOrigin = '0 50%';
+            canvas.appendChild(line);
+            
+            // Add click event for subtopics
+            branchNode.addEventListener('click', () => {
+                this.showSubtopics(branchNode, branch.subtopics);
             });
         });
     }
-
-    createMindMapNode(text, x, y, type) {
-        const node = document.createElement('div');
-        node.className = `mindmap-node ${type}`;
-        node.textContent = text;
-        node.style.left = `${Math.max(0, Math.min(x, 400))}px`;
-        node.style.top = `${Math.max(0, Math.min(y, 400))}px`;
+    
+    showSubtopics(parentNode, subtopics) {
+        // Remove existing subtopics
+        document.querySelectorAll('.subtopic-node').forEach(node => node.remove());
         
-        // Add touch and click events
-        node.addEventListener('click', () => {
-            node.style.transform = 'scale(1.1)';
-            setTimeout(() => {
-                node.style.transform = 'scale(1)';
-            }, 200);
+        subtopics.forEach((subtopic, index) => {
+            const subtopicNode = document.createElement('div');
+            subtopicNode.className = 'mind-node subtopic-node';
+            subtopicNode.textContent = subtopic;
+            
+            // Position around parent
+            const angle = (index * 360) / subtopics.length;
+            const offsetX = 80 * Math.cos(angle * Math.PI / 180);
+            const offsetY = 80 * Math.sin(angle * Math.PI / 180);
+            
+            const parentRect = parentNode.getBoundingClientRect();
+            const canvasRect = document.getElementById('mindmapCanvas').getBoundingClientRect();
+            
+            const x = ((parentRect.left - canvasRect.left + offsetX) / canvasRect.width) * 100;
+            const y = ((parentRect.top - canvasRect.top + offsetY) / canvasRect.height) * 100;
+            
+            subtopicNode.style.left = `${x}%`;
+            subtopicNode.style.top = `${y}%`;
+            subtopicNode.style.transform = 'translate(-50%, -50%)';
+            
+            document.getElementById('mindmapCanvas').appendChild(subtopicNode);
         });
-
-        return node;
     }
-
-    createMindMapLine(x1, y1, x2, y2) {
-        const line = document.createElement('div');
-        line.className = 'mindmap-line';
-        
-        const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-        
-        line.style.width = `${length}px`;
-        line.style.height = '2px';
-        line.style.left = `${x1}px`;
-        line.style.top = `${y1}px`;
-        line.style.transform = `rotate(${angle}deg)`;
-        
-        return line;
-    }
-
-    exportMindMap() {
-        this.showModal('Export', 'Mapa myśli została wyeksportowana jako obraz PNG.');
-    }
-
-    // Summary functionality
-    generateSummary() {
-        this.showSection('summary');
-        this.updateSummary('medium');
-        this.awardPoints(15);
-    }
-
-    updateSummary(length) {
+    
+    renderSummary() {
         const summaryContent = document.getElementById('summaryContent');
-        if (!summaryContent) return;
-
-        let content = '';
+        if (!summaryContent || !this.summaryData) return;
         
-        switch (length) {
-            case 'short':
-                content = `
-                    <h3>Krótkie streszczenie</h3>
-                    <ul>
-                        <li>Dorosły człowiek ma <span class="key-concept">206 kości</span></li>
-                        <li><span class="key-concept">12 par żeber</span> chroni klatkę piersiową</li>
-                        <li>Kręgosłup składa się z <span class="key-concept">33-34 kręgów</span></li>
-                    </ul>
-                `;
-                break;
-            case 'medium':
-                content = `
-                    <h3>Średnie streszczenie</h3>
-                    <p>Anatomia człowieka obejmuje badanie budowy ciała ludzkiego, ze szczególnym uwzględnieniem systemu kostnego.</p>
-                    
-                    <h3>System kostny</h3>
-                    <ul>
-                        <li>Składa się z <span class="key-concept">206 kości</span> u dorosłego człowieka</li>
-                        <li>Pełni funkcje ochronne i podporowe</li>
-                    </ul>
-
-                    <h3>Żebra</h3>
-                    <ul>
-                        <li><span class="key-concept">12 par żeber</span> łącznie</li>
-                        <li>7 par prawdziwych połączonych z mostkiem</li>
-                        <li>3 pary fałszywych + 2 pary wolnych</li>
-                    </ul>
-
-                    <h3>Kręgosłup</h3>
-                    <ul>
-                        <li>33-34 kręgi w 5 odcinkach</li>
-                        <li>Umożliwia różnorodne ruchy</li>
-                    </ul>
-                `;
-                break;
-            case 'detailed':
-                content = `
-                    <h3>Szczegółowe streszczenie</h3>
-                    <p>Anatomia człowieka to kompleksowa nauka zajmująca się szczegółowym badaniem budowy ciała ludzkiego. System kostny stanowi fundamentalną strukturę organizmu.</p>
-                    
-                    <h3>System kostny - podstawowe informacje</h3>
-                    <ul>
-                        <li>Dorosły człowiek posiada <span class="key-concept">206 kości</span></li>
-                        <li>Kości pełnią funkcje ochronne dla narządów wewnętrznych</li>
-                        <li>Zapewniają podporę strukturalną całego organizmu</li>
-                        <li>Umożliwiają ruch poprzez połączenia stawowe</li>
-                    </ul>
-
-                    <h3>Żebra - szczegółowa charakterystyka</h3>
-                    <ul>
-                        <li>Łącznie <span class="key-concept">12 par żeber</span> (24 żebra)</li>
-                        <li><span class="key-concept">7 par żeber prawdziwych</span> - bezpośrednio połączonych z mostkiem</li>
-                        <li><span class="key-concept">3 pary żeber fałszywych</span> - pośrednio połączonych z mostkiem</li>
-                        <li><span class="key-concept">2 pary żeber wolnych</span> - nie połączonych z mostkiem</li>
-                        <li>Główna funkcja: ochrona narządów klatki piersiowej (serce, płuca)</li>
-                    </ul>
-
-                    <h3>Kręgosłup - budowa i funkcje</h3>
-                    <ul>
-                        <li>Składa się z <span class="key-concept">33-34 kręgów</span></li>
-                        <li><span class="key-concept">Odcinek szyjny</span>: 7 kręgów</li>
-                        <li><span class="key-concept">Odcinek piersiowy</span>: 12 kręgów</li>
-                        <li><span class="key-concept">Odcinek lędźwiowy</span>: 5 kręgów</li>
-                        <li><span class="key-concept">Odcinek krzyżowy</span>: 5 kręgów zrośniętych</li>
-                        <li><span class="key-concept">Odcinek guziczny</span>: 4-5 kręgów</li>
-                    </ul>
-
-                    <h3>Ruchy kręgosłupa</h3>
-                    <ul>
-                        <li><span class="key-concept">Zgięcie</span> - pochylanie do przodu</li>
-                        <li><span class="key-concept">Prostowanie</span> - wyprostowywanie</li>
-                        <li><span class="key-concept">Skłony boczne</span> - ruchy na boki</li>
-                        <li><span class="key-concept">Rotacja</span> - ruchy obrotowe</li>
-                    </ul>
-                `;
-                break;
-        }
+        const length = document.getElementById('summaryLength').value;
+        const summary = this.summaryData[length] || this.summaryData.medium;
         
-        summaryContent.innerHTML = content;
+        summaryContent.innerHTML = `<div class="summary-text">${summary}</div>`;
     }
-
-    exportSummary() {
-        const summaryContent = document.getElementById('summaryContent');
-        if (summaryContent) {
-            const text = summaryContent.textContent;
-            this.showModal('Export', 'Streszczenie zostało skopiowane do schowka.');
-        }
+    
+    updateSummary() {
+        this.renderSummary();
     }
-
-    // Quiz functionality - Fixed selection tracking
+    
     startQuiz() {
         this.currentQuizIndex = 0;
         this.quizAnswers = [];
-        this.selectedQuizOption = null; // Reset selection
-        this.showSection('quiz');
-        this.displayQuestion();
-    }
-
-    displayQuestion() {
-        const question = this.quizData[this.currentQuizIndex];
-        const questionText = document.getElementById('questionText');
-        const questionNumber = document.getElementById('questionNumber');
-        const totalQuestions = document.getElementById('totalQuestions');
-        const optionsContainer = document.getElementById('quizOptions');
-        const feedback = document.getElementById('quizFeedback');
-        const submitBtn = document.getElementById('submitAnswer');
-        const nextBtn = document.getElementById('nextQuestion');
-
-        // Reset selection state
         this.selectedQuizOption = null;
-
-        if (questionText) questionText.textContent = question.question;
-        if (questionNumber) questionNumber.textContent = this.currentQuizIndex + 1;
-        if (totalQuestions) totalQuestions.textContent = this.quizData.length;
-
-        // Clear previous options
-        if (optionsContainer) {
-            optionsContainer.innerHTML = '';
-            
-            question.options.forEach((option, index) => {
-                const optionButton = document.createElement('button');
-                optionButton.className = 'quiz-option';
-                optionButton.textContent = option;
-                optionButton.dataset.index = index;
-                
-                // Fixed event listener with proper selection tracking
-                optionButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    
-                    // Remove selection from all options
-                    document.querySelectorAll('.quiz-option').forEach(opt => {
-                        opt.classList.remove('selected');
-                    });
-                    
-                    // Add selection to clicked option
-                    optionButton.classList.add('selected');
-                    
-                    // Store selection
-                    this.selectedQuizOption = index;
-                    
-                    console.log('Selected option:', index); // Debug log
-                });
-                
-                optionsContainer.appendChild(optionButton);
-            });
-        }
-
-        // Reset UI state
-        if (feedback) feedback.classList.add('hidden');
-        if (submitBtn) {
-            submitBtn.classList.remove('hidden');
-            submitBtn.disabled = false;
-        }
-        if (nextBtn) nextBtn.classList.add('hidden');
+        this.renderQuizQuestion();
     }
-
-    submitQuizAnswer() {
-        // Check if an option is selected using the tracked state
-        if (this.selectedQuizOption === null) {
-            this.showModal('Uwaga', 'Proszę wybrać odpowiedź przed przesłaniem.');
-            return;
-        }
-
-        const selectedIndex = this.selectedQuizOption;
-        const question = this.quizData[this.currentQuizIndex];
-        const isCorrect = selectedIndex === question.correct;
-
-        console.log('Submitting answer:', selectedIndex, 'Correct:', question.correct, 'Is correct:', isCorrect); // Debug log
-
-        // Store answer
-        this.quizAnswers.push({
-            questionIndex: this.currentQuizIndex,
-            selectedIndex: selectedIndex,
-            correct: isCorrect
-        });
-
-        // Show feedback
-        this.showQuizFeedback(isCorrect, question.explanation);
-        
-        // Update option styles
-        document.querySelectorAll('.quiz-option').forEach((option, index) => {
-            option.disabled = true;
-            if (index === question.correct) {
-                option.classList.add('correct');
-            } else if (index === selectedIndex && !isCorrect) {
-                option.classList.add('incorrect');
-            }
-        });
-
-        // Update UI
-        const submitBtn = document.getElementById('submitAnswer');
-        const nextBtn = document.getElementById('nextQuestion');
-        
-        if (submitBtn) submitBtn.classList.add('hidden');
-        if (nextBtn) nextBtn.classList.remove('hidden');
-    }
-
-    showQuizFeedback(isCorrect, explanation) {
-        const feedback = document.getElementById('quizFeedback');
-        if (feedback) {
-            feedback.innerHTML = `
-                <div style="margin-bottom: 12px;">
-                    <strong>${isCorrect ? '✅ Poprawnie!' : '❌ Niepoprawnie'}</strong>
-                </div>
-                <div>${explanation}</div>
-            `;
-            feedback.classList.remove('hidden');
-        }
-    }
-
-    nextQuestion() {
-        this.currentQuizIndex++;
-        
+    
+    renderQuizQuestion() {
         if (this.currentQuizIndex >= this.quizData.length) {
             this.showQuizResults();
-        } else {
-            this.displayQuestion();
+            return;
         }
-    }
-
-    showQuizResults() {
-        this.showSection('quiz-results');
         
-        const correctAnswers = this.quizAnswers.filter(answer => answer.correct).length;
-        const totalQuestions = this.quizData.length;
+        const question = this.quizData[this.currentQuizIndex];
+        const quizContent = document.getElementById('quizContent');
+        
+        // Update progress
+        const progress = ((this.currentQuizIndex + 1) / this.quizData.length) * 100;
+        document.getElementById('quizProgress').style.width = `${progress}%`;
+        document.getElementById('currentQuestion').textContent = this.currentQuizIndex + 1;
+        document.getElementById('totalQuestions').textContent = this.quizData.length;
+        
+        quizContent.innerHTML = `
+            <div class="question">
+                <h3>${question.question}</h3>
+                <div class="options">
+                    ${question.options.map((option, index) => `
+                        <div class="option" onclick="app.selectOption(${index})">
+                            <input type="radio" name="answer" id="option${index}" value="${index}">
+                            <label for="option${index}">${option}</label>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="quiz-actions">
+                    <button class="btn btn--primary" onclick="app.submitAnswer()" disabled id="submitBtn">
+                        Potwierdź odpowiedź
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        this.selectedQuizOption = null;
+    }
+    
+    selectOption(optionIndex) {
+        // Remove previous selection
+        document.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+        
+        // Select current option
+        document.querySelectorAll('.option')[optionIndex].classList.add('selected');
+        document.getElementById(`option${optionIndex}`).checked = true;
+        
+        this.selectedQuizOption = optionIndex;
+        document.getElementById('submitBtn').disabled = false;
+    }
+    
+    submitAnswer() {
+        if (this.selectedQuizOption === null) return;
+        
+        const question = this.quizData[this.currentQuizIndex];
+        const isCorrect = this.selectedQuizOption === question.correct;
+        
+        this.quizAnswers.push({
+            questionIndex: this.currentQuizIndex,
+            selectedAnswer: this.selectedQuizOption,
+            correctAnswer: question.correct,
+            isCorrect: isCorrect,
+            question: question.question,
+            explanation: question.explanation
+        });
+        
+        // Show feedback
+        this.showAnswerFeedback(isCorrect, question.explanation);
+        
+        // Move to next question after delay
+        setTimeout(() => {
+            this.currentQuizIndex++;
+            this.renderQuizQuestion();
+        }, 2000);
+    }
+    
+    showAnswerFeedback(isCorrect, explanation) {
+        const quizContent = document.getElementById('quizContent');
+        const feedbackClass = isCorrect ? 'feedback-correct' : 'feedback-incorrect';
+        const feedbackIcon = isCorrect ? '✅' : '❌';
+        const feedbackText = isCorrect ? 'Poprawnie!' : 'Niepoprawnie';
+        
+        quizContent.innerHTML += `
+            <div class="answer-feedback ${feedbackClass}">
+                <div class="feedback-header">
+                    <span class="feedback-icon">${feedbackIcon}</span>
+                    <span class="feedback-text">${feedbackText}</span>
+                </div>
+                <div class="feedback-explanation">
+                    ${explanation}
+                </div>
+            </div>
+        `;
+    }
+    
+    showQuizResults() {
+        this.hideAllSections();
+        document.getElementById('quizResultsSection').classList.remove('hidden');
+        
+        const correctAnswers = this.quizAnswers.filter(a => a.isCorrect).length;
+        const totalQuestions = this.quizAnswers.length;
         const percentage = Math.round((correctAnswers / totalQuestions) * 100);
         
         // Update results display
-        const scorePercentage = document.getElementById('scorePercentage');
-        const correctAnswersSpan = document.getElementById('correctAnswers');
-        const totalAnswersSpan = document.getElementById('totalAnswers');
-        const gradeDisplay = document.getElementById('gradeDisplay');
-        const improvementsList = document.getElementById('improvementsList');
-
-        if (scorePercentage) scorePercentage.textContent = `${percentage}%`;
-        if (correctAnswersSpan) correctAnswersSpan.textContent = correctAnswers;
-        if (totalAnswersSpan) totalAnswersSpan.textContent = totalQuestions;
+        document.getElementById('finalScore').textContent = percentage;
+        document.getElementById('correctAnswers').textContent = correctAnswers;
+        document.getElementById('wrongAnswers').textContent = totalQuestions - correctAnswers;
+        document.getElementById('predictedGrade').textContent = this.getGradeFromPercentage(percentage);
         
-        // Calculate grade
-        const grade = this.calculateGrade(percentage);
-        if (gradeDisplay) gradeDisplay.textContent = grade;
-
         // Show improvement areas
-        if (improvementsList) {
-            improvementsList.innerHTML = '';
-            const wrongAnswers = this.quizAnswers.filter(answer => !answer.correct);
-            
-            if (wrongAnswers.length === 0) {
-                improvementsList.innerHTML = '<li>Doskonała robota! Nie ma obszarów wymagających poprawy.</li>';
-            } else {
-                wrongAnswers.forEach(wrongAnswer => {
-                    const question = this.quizData[wrongAnswer.questionIndex];
-                    const li = document.createElement('li');
-                    li.textContent = this.getImprovementArea(question.question);
-                    improvementsList.appendChild(li);
-                });
-            }
-        }
-
+        this.showImprovementAreas();
+        
         // Award points and check badges
-        this.awardPoints(30);
-        if (percentage >= 80) {
-            this.checkBadge('Quiz Champion');
+        this.addPoints(correctAnswers * 3); // 3 points per correct answer
+        this.userProgress.completedQuizzes++;
+        
+        if (percentage >= 80) this.checkBadgeRequirement('score80');
+        if (percentage === 100) this.checkBadgeRequirement('perfectScore');
+        
+        this.saveProgress();
+    }
+    
+    getGradeFromPercentage(percentage) {
+        if (percentage >= 95) return '5.0 (Celujący)';
+        if (percentage >= 85) return '4.5 (Bardzo dobry+)';
+        if (percentage >= 75) return '4.0 (Bardzo dobry)';
+        if (percentage >= 65) return '3.5 (Dobry+)';
+        if (percentage >= 55) return '3.0 (Dobry)';
+        if (percentage >= 45) return '2.5 (Dostateczny+)';
+        if (percentage >= 35) return '2.0 (Dostateczny)';
+        return '1.0 (Niedostateczny)';
+    }
+    
+    showImprovementAreas() {
+        const incorrectAnswers = this.quizAnswers.filter(a => !a.isCorrect);
+        const improvementList = document.getElementById('improvementList');
+        
+        if (incorrectAnswers.length === 0) {
+            improvementList.innerHTML = '<p class="no-improvements">🎉 Doskonały wynik! Nie ma obszarów do poprawy.</p>';
+            return;
         }
-        if (percentage === 100) {
-            this.checkBadge('Perfectionist');
-            this.awardPoints(50);
-        }
+        
+        const areas = incorrectAnswers.map((answer, index) => `
+            <div class="improvement-item">
+                <h4>Pytanie ${answer.questionIndex + 1}</h4>
+                <p class="question-text">${answer.question}</p>
+                <p class="explanation">${answer.explanation}</p>
+            </div>
+        `);
+        
+        improvementList.innerHTML = areas.join('');
     }
-
-    calculateGrade(percentage) {
-        if (percentage >= 90) return '5';
-        if (percentage >= 80) return '4+';
-        if (percentage >= 70) return '4';
-        if (percentage >= 60) return '3+';
-        if (percentage >= 50) return '3';
-        return '2';
-    }
-
-    getImprovementArea(question) {
-        if (question.includes('żeber')) return 'Budowa żeber i ich klasyfikacja';
-        if (question.includes('kręgów') || question.includes('kręgosłup')) return 'Budowa i funkcje kręgosłupa';
-        if (question.includes('ruchy')) return 'Ruchy kręgosłupa';
-        return 'Anatomia systemu kostnego';
-    }
-
+    
     retakeQuiz() {
         this.startQuiz();
+        this.showQuiz();
     }
-
-    // Gamification system
-    awardPoints(points) {
+    
+    // Utility methods
+    capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+    
+    shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+    
+    // Progress and gamification
+    addPoints(points) {
         this.userProgress.points += points;
         this.updateLevel();
-        this.updateUserStats();
-        
-        // Show points notification
-        this.showModal('Punkty!', `Otrzymałeś ${points} punktów! 🎉`);
+        this.updateProgressDisplay();
     }
-
+    
     updateLevel() {
         const points = this.userProgress.points;
         let newLevel;
         
-        if (points >= 300) newLevel = 'Ekspert';
-        else if (points >= 200) newLevel = 'Zaawansowany';
-        else if (points >= 100) newLevel = 'Średniozaawansowany';
+        if (points >= 1000) newLevel = 'Ekspert';
+        else if (points >= 500) newLevel = 'Zaawansowany';
+        else if (points >= 200) newLevel = 'Średniozaawansowany';
         else newLevel = 'Początkujący';
         
         if (newLevel !== this.userProgress.level) {
             this.userProgress.level = newLevel;
-            this.showModal('Awans!', `Gratulacje! Osiągnąłeś poziom: ${newLevel}! 🎊`);
+            this.showAchievement('🆙 Nowy poziom!', `Awansowałeś na poziom: ${newLevel}`, '🎖️');
         }
     }
-
-    checkBadge(badgeName) {
-        const badge = this.badges.find(b => b.name === badgeName);
-        if (badge && !badge.earned) {
-            badge.earned = true;
-            this.userProgress.badges.push(badgeName);
-            this.renderBadges();
-            this.showModal('Nowa odznaka!', `Otrzymałeś odznakę: ${badgeName}! ${badge.icon}`);
-        }
-    }
-
-    updateUserStats() {
-        const levelElement = document.getElementById('userLevel');
-        const pointsElement = document.getElementById('userPoints');
+    
+    checkBadgeRequirement(requirement) {
+        const badge = this.badges.find(b => 
+            b.requirement === requirement && 
+            !this.userProgress.badges.includes(b.name)
+        );
         
-        if (levelElement) levelElement.textContent = this.userProgress.level;
-        if (pointsElement) pointsElement.textContent = this.userProgress.points;
-    }
-
-    renderBadges() {
-        const badgesGrid = document.getElementById('badgesGrid');
-        if (!badgesGrid) return;
-
-        badgesGrid.innerHTML = '';
-        
-        this.badges.forEach(badge => {
-            const badgeElement = document.createElement('div');
-            badgeElement.className = `badge ${badge.earned ? 'earned' : ''}`;
-            badgeElement.innerHTML = `
-                <div class="badge-icon">${badge.icon}</div>
-                <div class="badge-name">${badge.name}</div>
-                <div class="badge-description">${badge.description}</div>
-            `;
-            badgesGrid.appendChild(badgeElement);
-        });
-    }
-
-    // Modal functionality
-    showModal(title, message) {
-        const modal = document.getElementById('notificationModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalMessage = document.getElementById('modalMessage');
-        
-        if (modalTitle) modalTitle.textContent = title;
-        if (modalMessage) modalMessage.textContent = message;
-        if (modal) modal.classList.remove('hidden');
-    }
-
-    hideModal() {
-        const modal = document.getElementById('notificationModal');
-        if (modal) modal.classList.add('hidden');
-    }
-}
-
-// Initialize the application
-document.addEventListener('DOMContentLoaded', () => {
-    new EduLearnApp();
-});
-
-// Add touch-friendly interactions for iOS
-if ('ontouchstart' in window) {
-    // Add touch feedback
-    document.addEventListener('touchstart', (e) => {
-        if (e.target.classList.contains('btn') || 
-            e.target.classList.contains('quiz-option') ||
-            e.target.classList.contains('activity-card')) {
-            e.target.style.transform = 'scale(0.95)';
+        if (badge) {
+            this.userProgress.badges.push(badge.name);
+            this.showAchievement(badge.name, badge.description, badge.icon);
         }
-    });
-
-    document.addEventListener('touchend', (e) => {
-        if (e.target.classList.contains('btn') || 
-            e.target.classList.contains('quiz-option') ||
-            e.target.classList.contains('activity-card')) {
-            setTimeout(() => {
-                e.target.style.transform = '';
-            }, 150);
-        }
-    });
-}
-
-// Prevent zoom on iOS
-document.addEventListener('gesturestart', (e) => {
-    e.preventDefault();
-});
-
-// Add visual feedback for successful actions
-function addSuccessAnimation(element) {
-    if (element) {
-        element.classList.add('slide-up');
+    }
+    
+    showAchievement(title, description, icon) {
+        const popup = document.getElementById('achievementPopup');
+        document.getElementById('achievementTitle').textContent = title;
+        document.getElementById('achievementDescription').textContent = description;
+        document.getElementById('achievementIcon').textContent = icon;
+        
+        popup.classList.remove('hidden');
+        
         setTimeout(() => {
-            element.classList.remove('slide-up');
-        }, 300);
+            popup.classList.add('hidden');
+        }, 4000);
+    }
+    
+    updateProgressDisplay() {
+        document.getElementById('userLevel').textContent = this.userProgress.level;
+        document.getElementById('userPoints').textContent = this.userProgress.points;
+    }
+    
+    addToRecentDocuments(fileName, pageCount) {
+        const recentDocs = this.getRecentDocuments();
+        const newDoc = {
+            name: fileName,
+            pages: pageCount,
+            date: new Date().toLocaleDateString('pl-PL'),
+            timestamp: Date.now()
+        };
+        
+        recentDocs.unshift(newDoc);
+        localStorage.setItem('edulearn_recent_docs', JSON.stringify(recentDocs.slice(0, 5))); // Keep only 5 recent
+        this.updateRecentDocsDisplay();
+    }
+    
+    getRecentDocuments() {
+        const stored = localStorage.getItem('edulearn_recent_docs');
+        return stored ? JSON.parse(stored) : [];
+    }
+    
+    updateRecentDocsDisplay() {
+        const recentDocs = this.getRecentDocuments();
+        const container = document.getElementById('recentDocsList');
+        
+        if (recentDocs.length === 0) {
+            container.innerHTML = '<p class="no-docs">Nie ma jeszcze przetworzonych dokumentów</p>';
+            return;
+        }
+        
+        container.innerHTML = recentDocs.map(doc => `
+            <div class="recent-doc-item">
+                <div class="doc-icon">📄</div>
+                <div class="doc-info">
+                    <div class="doc-name">${doc.name}</div>
+                    <div class="doc-details">${doc.pages} stron • ${doc.date}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // Storage methods
+    saveProgress() {
+        localStorage.setItem('edulearn_progress', JSON.stringify(this.userProgress));
+    }
+    
+    loadProgress() {
+        const stored = localStorage.getItem('edulearn_progress');
+        return stored ? JSON.parse(stored) : null;
+    }
+    
+    // Export functions
+    exportMindMap() {
+        if (!this.mindMapData) return;
+        
+        const dataStr = JSON.stringify(this.mindMapData, null, 2);
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mapa-mysli-${Date.now()}.json`;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+    }
+    
+    exportSummary() {
+        if (!this.summaryData) return;
+        
+        const length = document.getElementById('summaryLength').value;
+        const summary = this.summaryData[length];
+        
+        const blob = new Blob([summary], {type: 'text/plain;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `streszczenie-${Date.now()}.txt`;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+    }
+    
+    handleUrlSubmit() {
+        const urlInput = document.getElementById('urlInput');
+        const url = urlInput.value.trim();
+        
+        if (!url) {
+            alert('Proszę podać URL');
+            return;
+        }
+        
+        alert('Funkcja wczytywania z URL zostanie wkrótce dodana. Na razie obsługiwane są tylko pliki PDF.');
+        urlInput.value = '';
+    }
+    
+    // Mind map controls
+    zoomIn() {
+        const canvas = document.getElementById('mindmapCanvas');
+        const currentScale = parseFloat(canvas.style.transform.replace(/[^0-9.]/g, '')) || 1;
+        const newScale = Math.min(currentScale * 1.2, 3);
+        canvas.style.transform = `scale(${newScale})`;
+    }
+    
+    zoomOut() {
+        const canvas = document.getElementById('mindmapCanvas');
+        const currentScale = parseFloat(canvas.style.transform.replace(/[^0-9.]/g, '')) || 1;
+        const newScale = Math.max(currentScale / 1.2, 0.5);
+        canvas.style.transform = `scale(${newScale})`;
+    }
+    
+    resetZoom() {
+        const canvas = document.getElementById('mindmapCanvas');
+        canvas.style.transform = 'scale(1)';
     }
 }
+
+// Initialize app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new EduLearnApp();
+});
