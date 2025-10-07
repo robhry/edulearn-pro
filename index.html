@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>EduLearn Pro</title>
     <link rel="stylesheet" href="style.css">
-    <!-- PDF.js CDN -->
+    <!-- PDF.js CDN - KLUCZOWE dla działania aplikacji -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -41,15 +41,17 @@
                         <div class="upload-area" id="uploadArea">
                             <div class="upload-icon">📄</div>
                             <p>Przeciągnij i upuść plik PDF lub kliknij aby wybrać</p>
+                            <!-- NAPRAWIONE: usuniętno onclick z HTML, JS obsłuży to -->
                             <input type="file" id="fileInput" accept=".pdf" style="display: none;">
-                            <button class="btn btn--secondary" onclick="document.getElementById('fileInput').click()">
+                            <button class="btn btn--secondary" id="selectPdfBtn">
                                 Wybierz PDF
                             </button>
                         </div>
                         <div class="divider">lub</div>
                         <div class="url-input-section">
                             <input type="url" id="urlInput" placeholder="Wklej link do materiału...">
-                            <button class="btn btn--primary" onclick="app.handleUrlSubmit()">Dodaj Link</button>
+                            <!-- NAPRAWIONE: usunięto onclick, JS obsłuży to -->
+                            <button class="btn btn--primary" id="submitUrlBtn">Dodaj Link</button>
                         </div>
                     </div>
                 </div>
@@ -89,15 +91,16 @@
                             <p><strong>Stron:</strong> <span id="currentDocPages">-</span></p>
                         </div>
                         <div class="activity-buttons">
-                            <button class="btn btn--activity" onclick="app.showMindMap()">
+                            <!-- NAPRAWIONE: usunięto onclick z HTML, JS obsłuży to -->
+                            <button class="btn btn--activity" id="mindMapBtn">
                                 🧠 Mapa Myśli
                                 <small>Wizualizuj kluczowe pojęcia</small>
                             </button>
-                            <button class="btn btn--activity" onclick="app.showSummary()">
+                            <button class="btn btn--activity" id="summaryBtn">
                                 📝 Streszczenie
                                 <small>Podsumowanie treści</small>
                             </button>
-                            <button class="btn btn--activity" onclick="app.showQuiz()">
+                            <button class="btn btn--activity" id="quizBtn">
                                 🎓 Quiz
                                 <small>Sprawdź swoją wiedzę</small>
                             </button>
@@ -112,18 +115,21 @@
                     <div class="card__body">
                         <div class="section-header">
                             <h2>🧠 Mapa Myśli</h2>
-                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--back" id="mindMapBackBtn">← Powrót</button>
                         </div>
                         <div class="mindmap-container" id="mindmapContainer">
                             <div class="mindmap-controls">
-                                <button onclick="app.zoomIn()">🔍+</button>
-                                <button onclick="app.zoomOut()">🔍-</button>
-                                <button onclick="app.resetZoom()">⌂</button>
+                                <!-- NAPRAWIONE: usunięto onclick -->
+                                <button id="zoomInBtn">🔍+</button>
+                                <button id="zoomOutBtn">🔍-</button>
+                                <button id="resetZoomBtn">⌂</button>
                             </div>
                             <div class="mindmap-canvas" id="mindmapCanvas"></div>
                         </div>
                         <div class="mindmap-actions">
-                            <button class="btn btn--secondary" onclick="app.exportMindMap()">💾 Eksportuj</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--secondary" id="exportMindMapBtn">💾 Eksportuj</button>
                         </div>
                     </div>
                 </div>
@@ -135,11 +141,13 @@
                     <div class="card__body">
                         <div class="section-header">
                             <h2>📝 Streszczenie</h2>
-                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--back" id="summaryBackBtn">← Powrót</button>
                         </div>
                         <div class="summary-controls">
                             <label>Długość streszczenia:</label>
-                            <select id="summaryLength" onchange="app.updateSummary()">
+                            <!-- NAPRAWIONE: usunięto onchange -->
+                            <select id="summaryLength">
                                 <option value="short">Krótkie</option>
                                 <option value="medium" selected>Średnie</option>
                                 <option value="long">Szczegółowe</option>
@@ -149,7 +157,8 @@
                             <div class="loading-text">Generowanie streszczenia...</div>
                         </div>
                         <div class="summary-actions">
-                            <button class="btn btn--secondary" onclick="app.exportSummary()">💾 Eksportuj</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--secondary" id="exportSummaryBtn">💾 Eksportuj</button>
                         </div>
                     </div>
                 </div>
@@ -161,7 +170,8 @@
                     <div class="card__body">
                         <div class="section-header">
                             <h2>🎓 Quiz</h2>
-                            <button class="btn btn--back" onclick="app.showActivities()">← Powrót</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--back" id="quizBackBtn">← Powrót</button>
                         </div>
                         <div class="quiz-progress">
                             <div class="progress-info">
@@ -172,7 +182,7 @@
                             </div>
                         </div>
                         <div class="quiz-content" id="quizContent">
-                            <!-- Quiz questions will be populated here -->
+                            <!-- Quiz questions will be populated by JavaScript -->
                         </div>
                     </div>
                 </div>
@@ -199,13 +209,14 @@
                         <div class="improvement-areas">
                             <h3>Obszary do poprawy</h3>
                             <div id="improvementList">
-                                <!-- Improvement areas will be populated here -->
+                                <!-- Improvement areas will be populated by JavaScript -->
                             </div>
                         </div>
 
                         <div class="results-actions">
-                            <button class="btn btn--primary" onclick="app.retakeQuiz()">🔄 Ponów Quiz</button>
-                            <button class="btn btn--secondary" onclick="app.showActivities()">← Powrót</button>
+                            <!-- NAPRAWIONE: usunięto onclick -->
+                            <button class="btn btn--primary" id="retakeQuizBtn">🔄 Ponów Quiz</button>
+                            <button class="btn btn--secondary" id="resultsBackBtn">← Powrót</button>
                         </div>
                     </div>
                 </div>
@@ -231,6 +242,16 @@
         </div>
     </footer>
 
+    <!-- JavaScript - WAŻNA KOLEJNOŚĆ! -->
+    <!-- NAJPIERW PDF.js (już załadowany w <head>), POTEM nasza aplikacja -->
+    <script>
+        // Debug info - sprawdzenie czy PDF.js jest załadowany
+        console.log('=== SPRAWDZANIE ŚRODOWISKA ===');
+        console.log('PDF.js załadowany:', typeof pdfjsLib !== 'undefined');
+        console.log('Document ready state:', document.readyState);
+        console.log('User Agent:', navigator.userAgent);
+        console.log('=======================');
+    </script>
     <script src="app.js"></script>
 </body>
 </html>
